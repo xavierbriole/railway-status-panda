@@ -36,9 +36,13 @@ function brandName(): string {
   return process.env.APP_NAME?.trim() || "StatusPanda";
 }
 
+function logoUrl(): string {
+  return getSetting("logo_url") || "/icon.svg";
+}
+
 function nav(brand: string, extra: string): string {
   return `<header class="nav">
-    ${wordmark(brand)}
+    ${wordmark(brand, logoUrl())}
     <div class="nav-links">${extra}${themeToggle()}</div>
   </header>`;
 }
@@ -87,7 +91,7 @@ export function statusPage(): string {
     </script>
   `;
 
-  return layout({ title: `${title} status`, body, mood: copy.mood });
+  return layout({ title: `${title} status`, body, mood: copy.mood, logoUrl: logoUrl() });
 }
 
 function statusGlyph(mood: "up" | "watch" | "down"): string {
@@ -186,7 +190,7 @@ export function loginPage(error?: string): string {
     <div class="login-shell">
       ${themeToggle()}
       <div class="login-card">
-        ${wordmark(brandName())}
+        ${wordmark(brandName(), logoUrl())}
         <h1>Welcome in.</h1>
         <p class="hint">Username defaults to admin. Password is ADMIN_PASSWORD in your Railway variables.</p>
         ${error ? `<p class="error">${escapeHtml(error)}</p>` : ""}
@@ -203,7 +207,7 @@ export function loginPage(error?: string): string {
       </div>
     </div>
   `;
-  return layout({ title: "Admin", body, mood: "up" });
+  return layout({ title: "Admin", body, mood: "up", logoUrl: logoUrl() });
 }
 
 export function adminPage(opts: { toast?: string; editId?: number }): string {
@@ -341,7 +345,7 @@ export function adminPage(opts: { toast?: string; editId?: number }): string {
       })();
     </script>
   `;
-  return layout({ title: "Monitors", body, mood: overallStatus() === "down" ? "down" : "up", toast: opts.toast });
+  return layout({ title: "Monitors", body, mood: overallStatus() === "down" ? "down" : "up", toast: opts.toast, logoUrl: logoUrl() });
 }
 
 function adminCard(monitor: Monitor, editId?: number): string {
@@ -388,6 +392,10 @@ export function settingsPage(toast?: string): string {
           <input id="page_subtitle" name="page_subtitle" value="${escapeHtml(getSetting("page_subtitle", ""))}" placeholder="Leave blank to use the live headline" />
         </div>
         <div>
+          <label for="logo_url">Logo URL</label>
+          <input id="logo_url" name="logo_url" value="${escapeHtml(getSetting("logo_url", ""))}" placeholder="https://example.com/logo.svg" />
+        </div>
+        <div>
           <label for="discord_webhook">Discord webhook</label>
           <input id="discord_webhook" name="discord_webhook" value="${escapeHtml(getSetting("discord_webhook"))}" placeholder="https://discord.com/api/webhooks/..." />
         </div>
@@ -403,7 +411,7 @@ export function settingsPage(toast?: string): string {
       </form>
     </div>
   `;
-  return layout({ title: "Settings", body, mood: "up", toast });
+  return layout({ title: "Settings", body, mood: "up", toast, logoUrl: logoUrl() });
 }
 
 function intervalOptions(selected: number): string {
