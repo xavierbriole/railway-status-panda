@@ -49,7 +49,7 @@ function nav(brand: string, extra: string): string {
   </header>`;
 }
 
-export function statusPage(): string {
+export function statusPage(opts: { isAdmin?: boolean } = {}): string {
   const overall = overallStatus();
   const copy = headlines[overall];
   const monitors = listMonitors();
@@ -59,6 +59,7 @@ export function statusPage(): string {
   const subtitle = getSetting("page_subtitle");
   const last = lastCheckedAt();
   const headline = title === brand ? copy.title : title;
+  const hideAdminButton = !opts.isAdmin && getSetting("hide_admin_button") === "1";
 
   const body = `
     <div class="shell">
@@ -66,7 +67,7 @@ export function statusPage(): string {
         brand,
         `<a class="nav-link" href="#status">Status</a>
          <a class="nav-link" href="#incidents">Previous incidents</a>
-         <a class="btn" href="/login">${icon("admin")}Admin</a>`
+         ${hideAdminButton ? "" : `<a class="btn" href="/${opts.isAdmin ? "admin" : "login"}">${icon("admin")}Admin</a>`}`
       )}
 
       <section class="hero" id="status">
@@ -473,6 +474,12 @@ export function settingsPage(toast?: string): string {
         <div>
           <label for="page_subtitle">Public subtitle</label>
           <input id="page_subtitle" name="page_subtitle" value="${escapeHtml(getSetting("page_subtitle", ""))}" placeholder="Leave blank to use the live headline" />
+        </div>
+        <div class="row" style="align-items:center;gap:8px">
+          <input type="checkbox" id="hide_admin_button" name="hide_admin_button" value="1" style="width:auto" ${
+            getSetting("hide_admin_button") === "1" ? "checked" : ""
+          } />
+          <label for="hide_admin_button" style="margin:0">Hide the Admin button on the public status page for visitors who aren't logged in</label>
         </div>
         <div>
           <label for="logo_url">Logo URL</label>
