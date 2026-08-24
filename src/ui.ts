@@ -12,15 +12,17 @@ export function layout(opts: {
   body: string;
   mood?: "up" | "watch" | "down";
   toast?: string;
+  logoUrl?: string;
 }): string {
   const mood = opts.mood ?? "up";
+  const favicon = escapeHtml(opts.logoUrl || "/icon.svg");
   return `<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>${escapeHtml(opts.title)}</title>
-  <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+  <link rel="icon" href="${favicon}" type="image/svg+xml" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
@@ -81,9 +83,9 @@ export function pct(ratio: number | null): string {
   return `${(ratio * 100).toFixed(2)}%`;
 }
 
-export function wordmark(name = "StatusPanda"): string {
+export function wordmark(name = "StatusPanda", logoUrl = "/icon.svg"): string {
   return `<a class="brand" href="/">
-    <img class="mark" src="/icon.svg" width="32" height="32" alt="" />
+    <img class="mark" src="${escapeHtml(logoUrl)}" width="32" height="32" alt="" />
     <span class="word">${escapeHtml(name)}</span>
   </a>`;
 }

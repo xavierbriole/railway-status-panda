@@ -138,6 +138,7 @@ app.get("/admin/settings", requireAuth, (req, res) => {
 app.post("/admin/settings", requireAuth, (req, res) => {
   setSetting("page_title", String(req.body?.page_title || "StatusPanda").slice(0, 80));
   setSetting("page_subtitle", String(req.body?.page_subtitle || "").slice(0, 200));
+  setSetting("logo_url", String(req.body?.logo_url || "").trim().slice(0, 500));
   setSetting("discord_webhook", String(req.body?.discord_webhook || "").trim());
   setSetting("slack_webhook", String(req.body?.slack_webhook || "").trim());
   setSetting("generic_webhook", String(req.body?.generic_webhook || "").trim());
