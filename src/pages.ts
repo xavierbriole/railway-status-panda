@@ -1,4 +1,5 @@
 import {
+  getIncident,
   getMonitor,
   getSetting,
   lastCheckedAt,
@@ -7,6 +8,7 @@ import {
   listMonitors,
   recentChecks,
   uptimeRatio,
+  type Incident,
   type Monitor,
   type MonitorType,
 } from "./db.js";
@@ -206,9 +208,11 @@ export function loginPage(error?: string): string {
   return layout({ title: "Admin", body, mood: "up" });
 }
 
-export function adminPage(opts: { toast?: string; editId?: number }): string {
+export function adminPage(opts: { toast?: string; editId?: number; editIncidentId?: number }): string {
   const monitors = listMonitors();
+  const incidents = listIncidents();
   const edit = opts.editId ? getMonitor(opts.editId) : undefined;
+  const editIncident = opts.editIncidentId ? getIncident(opts.editIncidentId) : undefined;
   const brand = brandName();
   const selectedType: MonitorType = edit?.type ?? "http";
   const typeMeta = MONITOR_TYPES.find((item) => item.value === selectedType) ?? MONITOR_TYPES[0];
@@ -295,6 +299,22 @@ export function adminPage(opts: { toast?: string; editId?: number }): string {
           }
         </div>
       </section>
+
+      ${incidentForm(monitors, editIncident)}
+
+      <section class="monitor-list" style="margin-top:40px">
+        <div class="monitor-list-head">
+          <h2>Incidents</h2>
+          <span class="monitor-count">${incidents.length}</span>
+        </div>
+        <div class="stack">
+          ${
+            incidents.length
+              ? incidents.map((item) => adminIncidentCard(item, opts.editIncidentId)).join("")
+              : `<div class="empty service"><h2>No incidents yet</h2><p>Reported incidents will show up here.</p></div>`
+          }
+        </div>
+      </section>
     </div>
     <script>
       (function () {
@@ -365,6 +385,69 @@ function adminCard(monitor: Monitor, editId?: number): string {
         <button class="btn" type="submit">${monitor.enabled ? `${icon("pause")}Pause` : `${icon("play")}Resume`}</button>
       </form>
       <form method="post" action="/admin/monitors/${monitor.id}/delete">
+        <button class="btn danger" type="submit">${icon("trash")}Remove</button>
+      </form>
+    </div>
+  </article>`;
+}
+
+function incidentForm(monitors: Monitor[], edit?: Incident): string {
+  if (!monitors.length) return "";
+  return `<form class="service stack" method="post" action="${
+    edit ? `/admin/incidents/${edit.id}` : "/admin/incidents"
+  }" style="margin-top:40px">
+    <h3>${edit ? "Edit incident" : "Report an incident"}</h3>
+    <div class="form-grid">
+      <div>
+        <label for="incident_monitor_id">Monitor</label>
+        <select id="incident_monitor_id" name="monitor_id" required>
+          ${monitors
+            .map(
+              (m) =>
+                `<option value="${m.id}" ${edit?.monitor_id === m.id ? "selected" : ""}>${escapeHtml(m.name)}</option>`
+            )
+            .join("")}
+        </select>
+      </div>
+      <div>
+        <label for="incident_title">Title</label>
+        <input id="incident_title" name="title" required placeholder="Elevated error rates" value="${escapeHtml(edit?.title ?? "")}" />
+      </div>
+    </div>
+    <div>
+      <label for="incident_body">Description</label>
+      <textarea id="incident_body" name="body" rows="3" placeholder="What is happening and what you are doing about it">${escapeHtml(edit?.body ?? "")}</textarea>
+    </div>
+    <div class="row">
+      <button class="btn primary" type="submit">${edit ? `${icon("save")}Save` : `${icon("plus")}Report incident`}</button>
+      ${edit ? `<a class="btn" href="/admin">${icon("cancel")}Cancel</a>` : ""}
+    </div>
+  </form>`;
+}
+
+function adminIncidentCard(item: Incident & { monitor_name: string }, editIncidentId?: number): string {
+  const open = !item.ended_at;
+  return `<article class="service">
+    <div class="service-top">
+      <div>
+        <h3>${escapeHtml(item.title)}</h3>
+        <div class="meta"><span>${escapeHtml(item.monitor_name)}</span><span>${escapeHtml(formatTime(item.started_at))}</span></div>
+        ${item.body ? `<p class="incident-body">${escapeHtml(item.body)}</p>` : ""}
+      </div>
+      <span class="state ${open ? "down" : "up"}">${open ? "Ongoing" : "Resolved"}</span>
+    </div>
+    <div class="row" style="margin-top:16px">
+      <a class="btn" href="/admin?editIncident=${item.id}">${icon("edit")}${
+        editIncidentId === item.id ? "Editing" : "Edit"
+      }</a>
+      ${
+        open
+          ? `<form method="post" action="/admin/incidents/${item.monitor_id}/resolve">
+        <button class="btn" type="submit">${icon("save")}Resolve</button>
+      </form>`
+          : ""
+      }
+      <form method="post" action="/admin/incidents/${item.id}/delete">
         <button class="btn danger" type="submit">${icon("trash")}Remove</button>
       </form>
     </div>

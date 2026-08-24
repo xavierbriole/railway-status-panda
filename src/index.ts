@@ -1,13 +1,18 @@
 import express from "express";
 import {
   createMonitor,
+  deleteIncident,
   deleteMonitor,
+  getIncident,
   getMonitor,
   lastCheckedAt,
   latestCheck,
   listMonitors,
+  resolveIncident,
   seedExampleMonitor,
   setSetting,
+  startIncident,
+  updateIncident,
   updateMonitor,
   type MonitorType,
 } from "./db.js";
@@ -121,8 +126,9 @@ app.post("/logout", (req, res) => {
 
 app.get("/admin", requireAuth, (req, res) => {
   const edit = Number(req.query.edit || 0) || undefined;
+  const editIncident = Number(req.query.editIncident || 0) || undefined;
   const toast = toastFrom(req.query.toast);
-  res.type("html").send(adminPage({ editId: edit, toast }));
+  res.type("html").send(adminPage({ editId: edit, editIncidentId: editIncident, toast }));
 });
 
 app.get("/admin/settings", requireAuth, (req, res) => {
@@ -166,6 +172,45 @@ app.post("/admin/monitors/:id", requireAuth, (req, res) => {
 app.post("/admin/monitors/:id/delete", requireAuth, (req, res) => {
   deleteMonitor(Number(req.params.id));
   res.redirect("/admin?toast=removed");
+});
+
+app.post("/admin/incidents", requireAuth, (req, res) => {
+  const monitorId = Number(req.body?.monitor_id);
+  const title = String(req.body?.title || "").trim();
+  const body = String(req.body?.body || "").trim();
+  if (!getMonitor(monitorId) || !title) {
+    res.redirect("/admin?toast=incident_invalid");
+    return;
+  }
+  startIncident(monitorId, title, body, "manual");
+  res.redirect("/admin?toast=incident_added");
+});
+
+app.post("/admin/incidents/:id", requireAuth, (req, res) => {
+  const id = Number(req.params.id);
+  if (!getIncident(id)) {
+    res.redirect("/admin");
+    return;
+  }
+  const monitorId = Number(req.body?.monitor_id);
+  const title = String(req.body?.title || "").trim();
+  const body = String(req.body?.body || "").trim();
+  if (!getMonitor(monitorId) || !title) {
+    res.redirect(`/admin?editIncident=${id}&toast=incident_invalid`);
+    return;
+  }
+  updateIncident(id, { monitor_id: monitorId, title, body });
+  res.redirect("/admin?toast=incident_saved");
+});
+
+app.post("/admin/incidents/:id/delete", requireAuth, (req, res) => {
+  deleteIncident(Number(req.params.id));
+  res.redirect("/admin?toast=incident_removed");
+});
+
+app.post("/admin/incidents/:monitorId/resolve", requireAuth, (req, res) => {
+  resolveIncident(Number(req.params.monitorId));
+  res.redirect("/admin?toast=incident_resolved");
 });
 
 app.post("/admin/monitors/:id/pause", requireAuth, (req, res) => {
@@ -230,6 +275,11 @@ function toastFrom(value: unknown): string | undefined {
     removed: "Monitor removed.",
     updated: "Monitor updated.",
     url: "That target did not look right.",
+    incident_added: "Incident reported.",
+    incident_resolved: "Incident resolved.",
+    incident_invalid: "Pick a monitor and add a title.",
+    incident_saved: "Incident updated.",
+    incident_removed: "Incident removed.",
   };
   return map[key];
 }

@@ -63,7 +63,7 @@ async function runCheck(monitor: Monitor): Promise<void> {
 
 async function afterCheck(monitor: Monitor, ok: boolean, detail: string): Promise<void> {
   if (ok) {
-    const closed = resolveIncident(monitor.id);
+    const closed = resolveIncident(monitor.id, { autoOnly: true });
     if (closed) await notify("recovered", monitor.name, detail);
   } else if (consecutiveFailures(monitor.id) >= 2) {
     const alreadyOpen = Boolean(openIncident(monitor.id));
