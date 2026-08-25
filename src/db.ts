@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import Database from "better-sqlite3";
+import { runMigrations } from "./migrations.js";
 
 export type MonitorType = "http" | "keyword" | "tcp" | "dns" | "ssl";
 
@@ -104,6 +105,8 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_checks_monitor_time ON checks(monitor_id, checked_at);
   CREATE INDEX IF NOT EXISTS idx_incidents_open ON incidents(monitor_id, ended_at);
 `);
+
+runMigrations(db);
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -328,6 +331,9 @@ export function lastCheckedAt(): string | null {
 }
 
 export function seedExampleMonitor(): void {
+  const row = db.prepare("SELECT COUNT(*) AS n FROM monitors").get() as { n: number };
+  if (row.n > 0) return;
+
   const examples = [
     { name: "Website", url: "https://railway.com" },
     { name: "API health", url: "https://www.githubstatus.com" },
@@ -335,8 +341,6 @@ export function seedExampleMonitor(): void {
   ];
 
   for (const example of examples) {
-    const existing = db.prepare("SELECT id FROM monitors WHERE url = ?").get(example.url);
-    if (existing) continue;
     createMonitor({
       name: example.name,
       url: example.url,
