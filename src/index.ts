@@ -143,6 +143,7 @@ app.post("/admin/settings", requireAuth, (req, res) => {
   setSetting("discord_webhook", String(req.body?.discord_webhook || "").trim());
   setSetting("slack_webhook", String(req.body?.slack_webhook || "").trim());
   setSetting("generic_webhook", String(req.body?.generic_webhook || "").trim());
+  setSetting("ga4_id", String(req.body?.ga4_id || "").trim().slice(0, 20));
   res.redirect("/admin/settings?toast=saved");
 });
 
