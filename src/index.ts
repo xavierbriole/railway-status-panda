@@ -84,8 +84,8 @@ app.get("/events", (req, res) => {
   });
 });
 
-app.get("/", (_req, res) => {
-  res.type("html").send(statusPage());
+app.get("/", (req, res) => {
+  res.type("html").send(statusPage({ isAdmin: isAuthed(req) }));
 });
 
 app.get("/login", (req, res) => {
@@ -135,6 +135,7 @@ app.post("/admin/settings", requireAuth, (req, res) => {
   setSetting("discord_webhook", String(req.body?.discord_webhook || "").trim());
   setSetting("slack_webhook", String(req.body?.slack_webhook || "").trim());
   setSetting("generic_webhook", String(req.body?.generic_webhook || "").trim());
+  setSetting("ga4_id", String(req.body?.ga4_id || "").trim().slice(0, 20));
   res.redirect("/admin/settings?toast=saved");
 });
 

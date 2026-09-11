@@ -43,7 +43,7 @@ function nav(brand: string, extra: string): string {
   </header>`;
 }
 
-export function statusPage(): string {
+export function statusPage(opts: { isAdmin?: boolean } = {}): string {
   const overall = overallStatus();
   const copy = headlines[overall];
   const monitors = listMonitors();
@@ -87,7 +87,24 @@ export function statusPage(): string {
     </script>
   `;
 
-  return layout({ title: `${title} status`, body, mood: copy.mood });
+  return layout({
+    title: `${title} Status`,
+    body,
+    mood: copy.mood,
+    headExtra: opts.isAdmin ? undefined : ga4Snippet(),
+  });
+}
+
+function ga4Snippet(): string | undefined {
+  const id = getSetting("ga4_id").trim();
+  if (!/^G-[A-Z0-9]+$/i.test(id)) return;
+  return `<script async src="https://www.googletagmanager.com/gtag/js?id=${id}"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', '${id}');
+  </script>`;
 }
 
 function statusGlyph(mood: "up" | "watch" | "down"): string {
@@ -398,6 +415,11 @@ export function settingsPage(toast?: string): string {
         <div>
           <label for="generic_webhook">Generic JSON webhook</label>
           <input id="generic_webhook" name="generic_webhook" value="${escapeHtml(getSetting("generic_webhook"))}" placeholder="https://example.com/hooks/status" />
+        </div>
+        <div>
+          <label for="ga4_id">Google Analytics 4 measurement ID</label>
+          <input id="ga4_id" name="ga4_id" value="${escapeHtml(getSetting("ga4_id"))}" placeholder="G-XXXXXXXXXX" />
+          <p class="field-hint">Only tracks visitors on the public status page, never signed-in admins.</p>
         </div>
         <button class="btn primary" type="submit">${icon("save")}Save</button>
       </form>

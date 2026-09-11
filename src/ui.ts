@@ -12,6 +12,7 @@ export function layout(opts: {
   body: string;
   mood?: "up" | "watch" | "down";
   toast?: string;
+  headExtra?: string;
 }): string {
   const mood = opts.mood ?? "up";
   return `<!doctype html>
@@ -34,6 +35,7 @@ export function layout(opts: {
     })();
   </script>
   <style>${css}</style>
+  ${opts.headExtra ?? ""}
 </head>
 <body class="mood-${mood}">
   ${opts.body}
