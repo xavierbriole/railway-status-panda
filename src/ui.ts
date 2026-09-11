@@ -13,6 +13,7 @@ export function layout(opts: {
   mood?: "up" | "watch" | "down";
   toast?: string;
   logoUrl?: string;
+  headExtra?: string;
 }): string {
   const mood = opts.mood ?? "up";
   const favicon = escapeHtml(opts.logoUrl || "/icon.svg");
@@ -36,6 +37,7 @@ export function layout(opts: {
     })();
   </script>
   <style>${css}</style>
+  ${opts.headExtra ?? ""}
 </head>
 <body class="mood-${mood}">
   ${opts.body}
