@@ -4,7 +4,7 @@ import {
   getSetting,
   lastCheckedAt,
   latestCheck,
-  listIncidents,
+  listIncidentsSince,
   listMonitors,
   recentChecks,
   uptimeRatio,
@@ -18,6 +18,7 @@ import { escapeHtml, formatTime, icon, layout, pct, themeToggle, ticks, wordmark
 export type Overall = "calm" | "watch" | "down";
 
 const TICK_COUNT = 90;
+const INCIDENT_DAYS = 30;
 
 export function overallStatus(): Overall {
   const monitors = listMonitors().filter((m) => m.enabled);
@@ -53,7 +54,6 @@ export function statusPage(opts: { isAdmin?: boolean } = {}): string {
   const overall = overallStatus();
   const copy = headlines[overall];
   const monitors = listMonitors();
-  const incidents = listIncidents(8);
   const brand = brandName();
   const title = getSetting("page_title", brand);
   const subtitle = getSetting("page_subtitle");
@@ -82,13 +82,29 @@ export function statusPage(opts: { isAdmin?: boolean } = {}): string {
       </section>
 
       ${monitors.length ? monitorList(monitors) : emptyPublic()}
-      ${incidentList(incidents)}
+      ${incidentDays()}
 
       <footer class="footer">
         <span>Powered by StatusPanda</span>
       </footer>
     </div>
     <script>
+      (function () {
+        var KEY = 'sp-open-days';
+        var days = Array.prototype.slice.call(document.querySelectorAll('details.incident-day'));
+        var stored = null;
+        try { stored = sessionStorage.getItem(KEY); } catch (e) {}
+        if (stored !== null) {
+          var open = stored ? stored.split(',') : [];
+          days.forEach(function (d) { d.open = open.indexOf(d.dataset.day) !== -1; });
+        }
+        days.forEach(function (d) {
+          d.addEventListener('toggle', function () {
+            var current = days.filter(function (x) { return x.open; }).map(function (x) { return x.dataset.day; });
+            try { sessionStorage.setItem(KEY, current.join(',')); } catch (e) {}
+          });
+        });
+      })();
       const src = new EventSource('/events');
       src.onmessage = () => { location.reload(); };
     </script>
@@ -180,30 +196,73 @@ function monitorList(monitors: Monitor[]): string {
   return `<section class="services" id="services">${rows}</section>`;
 }
 
-function incidentList(
-  incidents: Array<{ title: string; started_at: string; ended_at: string | null; monitor_name: string; body: string }>
-): string {
-  const items = incidents.length
-    ? incidents
-        .map((item) => {
-          const open = !item.ended_at;
-          return `<article class="incident ${open ? "open" : ""}">
-            <div class="incident-head">
-              <h3>${escapeHtml(item.title)}</h3>
-              <span class="status-text ${open ? "down" : "up"}">${open ? "Ongoing" : "Resolved"}</span>
-            </div>
-            <p class="incident-meta">${escapeHtml(item.monitor_name)} · ${escapeHtml(formatTime(item.started_at))}${
-              open ? "" : ` · Resolved ${escapeHtml(formatTime(item.ended_at))}`
-            }</p>
-            <p class="incident-body">${escapeHtml(item.body)}</p>
-          </article>`;
-        })
-        .join("")
-    : `<p class="incident-empty">No incidents reported.</p>`;
+function incidentDays(): string {
+  const today = startOfDay(new Date());
+  const byDay = new Map<string, Array<Incident & { monitor_name: string }>>();
+  for (const item of listIncidentsSince(incidentWindowStart().toISOString())) {
+    const key = dayKey(new Date(item.started_at));
+    byDay.set(key, [...(byDay.get(key) ?? []), item]);
+  }
+
+  const todayKey = dayKey(today);
+  const days = Array.from({ length: INCIDENT_DAYS }, (_, i) => {
+    const date = new Date(today);
+    date.setDate(date.getDate() - i);
+    const key = dayKey(date);
+    const items = byDay.get(key) ?? [];
+    const hasOpen = items.some((item) => !item.ended_at);
+    const label = date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+    const count = items.length
+      ? `<span class="status-text ${hasOpen ? "down" : "up"}">${items.length} ${items.length === 1 ? "incident" : "incidents"}</span>`
+      : `<span class="incident-day-none">No incidents</span>`;
+    return `<details class="incident-day" data-day="${key}" ${key === todayKey ? "open" : ""}>
+      <summary>
+        <span class="incident-day-label">${key === todayKey ? "Today" : escapeHtml(label)}</span>
+        <span class="incident-day-count">${count}${icon("chevron")}</span>
+      </summary>
+      <div class="incident-day-body">
+        ${items.length ? items.map(incidentItem).join("") : `<p class="incident-empty">No incidents reported.</p>`}
+      </div>
+    </details>`;
+  }).join("");
+
   return `<section class="incidents" id="incidents">
     <h2>Previous incidents</h2>
-    ${items}
+    ${days}
   </section>`;
+}
+
+function incidentItem(item: Incident & { monitor_name: string }): string {
+  const open = !item.ended_at;
+  return `<article class="incident ${open ? "open" : ""}">
+    <div class="incident-head">
+      <h3>${escapeHtml(item.title)}</h3>
+      <span class="status-text ${open ? "down" : "up"}">${open ? "Ongoing" : "Resolved"}</span>
+    </div>
+    <p class="incident-meta">${escapeHtml(item.monitor_name)} · ${escapeHtml(formatTime(item.started_at))}${
+      open ? "" : ` · Resolved ${escapeHtml(formatTime(item.ended_at))}`
+    }</p>
+    ${item.body ? `<p class="incident-body">${escapeHtml(item.body)}</p>` : ""}
+  </article>`;
+}
+
+function incidentWindowStart(): Date {
+  const since = startOfDay(new Date());
+  since.setDate(since.getDate() - (INCIDENT_DAYS - 1));
+  return since;
+}
+
+function startOfDay(date: Date): Date {
+  const copy = new Date(date);
+  copy.setHours(0, 0, 0, 0);
+  return copy;
+}
+
+function dayKey(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
 }
 
 export function loginPage(error?: string): string {
@@ -233,7 +292,7 @@ export function loginPage(error?: string): string {
 
 export function adminPage(opts: { toast?: string; editId?: number; editIncidentId?: number }): string {
   const monitors = listMonitors();
-  const incidents = listIncidents();
+  const incidents = listIncidentsSince(incidentWindowStart().toISOString());
   const edit = opts.editId ? getMonitor(opts.editId) : undefined;
   const editIncident = opts.editIncidentId ? getIncident(opts.editIncidentId) : undefined;
   const brand = brandName();

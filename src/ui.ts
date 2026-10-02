@@ -105,7 +105,8 @@ type IconName =
   | "pause"
   | "play"
   | "trash"
-  | "monitors";
+  | "monitors"
+  | "chevron";
 
 const icons: Record<IconName, string> = {
   admin: `<path d="M12 3l7 3v5c0 4.5-2.8 7.8-7 9-4.2-1.2-7-4.5-7-9V6l7-3Z"/><path d="M9.5 12.2l1.8 1.8 3.4-3.6"/>`,
@@ -121,6 +122,7 @@ const icons: Record<IconName, string> = {
   play: `<path d="M8 6.5v11l9-5.5-9-5.5Z"/>`,
   trash: `<path d="M5 8h14M9 8V6h6v2M8 8l1 12h6l1-12"/>`,
   monitors: `<rect x="4" y="5" width="16" height="11" rx="1.5"/><path d="M8 20h8M12 16v4"/>`,
+  chevron: `<path d="M9 6l6 6-6 6"/>`,
 };
 
 export function icon(name: IconName): string {
@@ -490,6 +492,47 @@ html[data-theme="dark"] .tick:hover { filter: brightness(1.15); }
   border-top: 1px solid var(--line);
   color: var(--muted);
 }
+.incident-day {
+  border-top: 1px solid var(--line);
+}
+.incident-day:last-child { border-bottom: 1px solid var(--line); }
+.incident-day summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 0;
+  cursor: pointer;
+  list-style: none;
+}
+.incident-day summary::-webkit-details-marker { display: none; }
+.incident-day-label {
+  font-size: 15px;
+  font-weight: 600;
+}
+.incident-day-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+.incident-day-none {
+  color: var(--faint);
+  font-size: 14px;
+}
+.incident-day-count .btn-icon {
+  color: var(--faint);
+  transition: transform .15s ease;
+}
+.incident-day[open] .incident-day-count .btn-icon { transform: rotate(90deg); }
+.incident-day-body {
+  padding: 0 0 14px 16px;
+  border-left: 2px solid var(--line);
+  margin-bottom: 14px;
+}
+.incident-day-body .incident { padding: 12px 0; }
+.incident-day-body .incident:first-child { border-top: 0; padding-top: 0; }
+.incident-day-body .incident:last-child { border-bottom: 0; padding-bottom: 0; }
+.incident-day-body .incident-empty { border-top: 0; padding: 0; }
 .footer {
   margin-top: 48px;
   color: var(--faint);

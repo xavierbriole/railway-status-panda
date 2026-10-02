@@ -311,16 +311,16 @@ export function resolveIncident(monitorId: number, opts?: { autoOnly?: boolean }
   return { ...open, ended_at };
 }
 
-export function listIncidents(limit = 20): Array<Incident & { monitor_name: string }> {
+export function listIncidentsSince(sinceIso: string): Array<Incident & { monitor_name: string }> {
   return db
     .prepare(
       `SELECT incidents.*, monitors.name AS monitor_name
        FROM incidents
        JOIN monitors ON monitors.id = incidents.monitor_id
-       ORDER BY incidents.started_at DESC
-       LIMIT ?`
+       WHERE incidents.started_at >= ?
+       ORDER BY incidents.started_at DESC`
     )
-    .all(limit) as Array<Incident & { monitor_name: string }>;
+    .all(sinceIso) as Array<Incident & { monitor_name: string }>;
 }
 
 export function lastCheckedAt(): string | null {
