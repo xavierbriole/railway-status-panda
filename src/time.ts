@@ -1,6 +1,9 @@
+import type { Request } from "express";
+import { readCookie } from "./cookies.js";
+
 export const DAY_MS = 24 * 60 * 60 * 1000;
 export const SLOT_MS = 15 * 60 * 1000;
-export const SERVER_TIME_ZONE = Intl.DateTimeFormat().resolvedOptions().timeZone;
+const TIME_ZONE_COOKIE = "tz";
 
 export type Day = { key: string; start: number; end: number };
 
@@ -14,6 +17,20 @@ function formatter(timeZone: string, options: Intl.DateTimeFormatOptions): Intl.
     formatters.set(id, cached);
   }
   return cached;
+}
+
+function isTimeZone(value: string): boolean {
+  try {
+    formatter(value, {});
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function visitorTimeZone(req: Request): string {
+  const value = readCookie(req, TIME_ZONE_COOKIE);
+  return value && value.length <= 64 && isTimeZone(value) ? value : "UTC";
 }
 
 function wallClock(ms: number, timeZone: string): number {
@@ -62,3 +79,25 @@ export function dayIndex(days: Day[], ms: number): number {
 export function formatDay(key: string): string {
   return formatter("UTC", { month: "short", day: "numeric", year: "numeric" }).format(Date.parse(`${key}T00:00:00Z`));
 }
+
+export function formatTime(iso: string | null, timeZone: string): string {
+  if (!iso) return "Waiting for the first check";
+  return formatter(timeZone, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZoneName: "short",
+  }).format(new Date(iso));
+}
+
+export const timeZoneScript = `(function () {
+  try {
+    var tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    var match = document.cookie.match(/(?:^|; )${TIME_ZONE_COOKIE}=([^;]*)/);
+    if (!tz || (match && decodeURIComponent(match[1]) === tz)) return;
+    document.cookie = "${TIME_ZONE_COOKIE}=" + encodeURIComponent(tz) + "; path=/; max-age=31536000; samesite=lax";
+    if (document.cookie.indexOf("${TIME_ZONE_COOKIE}=") !== -1) location.reload();
+  } catch (e) {}
+})();`;

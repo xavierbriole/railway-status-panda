@@ -1,4 +1,4 @@
-import { formatDay } from "./time.js";
+import { formatDay, timeZoneScript } from "./time.js";
 
 export function escapeHtml(value: string): string {
   return value
@@ -38,6 +38,7 @@ export function layout(opts: {
       } catch (e) {}
     })();
   </script>
+  <script>${timeZoneScript}</script>
   <style>${css}</style>
   ${opts.headExtra ?? ""}
 </head>
@@ -72,28 +73,6 @@ export function dayTicks(days: DayTick[]): string {
     })
     .join("");
   return `<div class="ticks">${cells}</div>`;
-}
-
-export function formatTime(iso: string | null): string {
-  if (!iso) return "Waiting for the first check";
-  return new Date(iso).toLocaleString("en-US", {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
-}
-
-export function formatAgo(iso: string | null): string {
-  if (!iso) return "Waiting for the first check";
-  const sec = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 1000));
-  if (sec < 60) return `${sec} ${sec === 1 ? "second" : "seconds"} ago`;
-  const min = Math.round(sec / 60);
-  if (min < 60) return `${min} ${min === 1 ? "minute" : "minutes"} ago`;
-  const hr = Math.round(min / 60);
-  if (hr < 48) return `${hr} ${hr === 1 ? "hour" : "hours"} ago`;
-  const day = Math.round(hr / 24);
-  return `${day} ${day === 1 ? "day" : "days"} ago`;
 }
 
 export function pct(ratio: number | null): string {

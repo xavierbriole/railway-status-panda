@@ -16,8 +16,8 @@ import {
   type MonitorType,
 } from "./db.js";
 import { MONITOR_TYPES, SSL_WARN_DAYS, targetLabel, typeLabel } from "./targets.js";
-import { dayIndex, formatDay, lastDays, SERVER_TIME_ZONE, type Day } from "./time.js";
-import { dayTicks, escapeHtml, formatTime, icon, layout, pct, themeToggle, ticks, wordmark, type DayTick } from "./ui.js";
+import { dayIndex, formatDay, formatTime, lastDays, type Day } from "./time.js";
+import { dayTicks, escapeHtml, icon, layout, pct, themeToggle, ticks, wordmark, type DayTick } from "./ui.js";
 
 export type Overall = "calm" | "watch" | "down";
 
@@ -53,7 +53,7 @@ function nav(brand: string, extra: string): string {
   </header>`;
 }
 
-export function statusPage(opts: { isAdmin?: boolean } = {}): string {
+export function statusPage(opts: { isAdmin?: boolean; timeZone: string }): string {
   const overall = overallStatus();
   const copy = headlines[overall];
   const monitors = listMonitors();
@@ -79,13 +79,13 @@ export function statusPage(opts: { isAdmin?: boolean } = {}): string {
           <div>
             <h1>${escapeHtml(headline)}</h1>
             ${subtitle ? `<p class="hero-sub">${escapeHtml(subtitle)}</p>` : ""}
-            <p class="hero-updated">Last updated ${escapeHtml(formatUpdated(last))}</p>
+            <p class="hero-updated">Last updated ${escapeHtml(formatTime(last, opts.timeZone))}</p>
           </div>
         </div>
       </section>
 
-      ${monitors.length ? monitorList(monitors, lastDays(HISTORY_BARS, SERVER_TIME_ZONE)) : emptyPublic()}
-      ${incidentDays()}
+      ${monitors.length ? monitorList(monitors, lastDays(HISTORY_BARS, opts.timeZone)) : emptyPublic()}
+      ${incidentDays(opts.timeZone)}
 
       <footer class="footer">
         <span>Powered by StatusPanda</span>
@@ -142,18 +142,6 @@ function statusGlyph(mood: "up" | "watch" | "down"): string {
     return `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 8l8 8M16 8l-8 8" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round"/></svg>`;
   }
   return `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 6v7" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round"/><circle cx="12" cy="17" r="1.5" fill="currentColor"/></svg>`;
-}
-
-function formatUpdated(iso: string | null): string {
-  if (!iso) return "Waiting for the first check";
-  return new Date(iso).toLocaleString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-    timeZoneName: "short",
-  });
 }
 
 function emptyPublic(): string {
@@ -220,8 +208,8 @@ function recentIncidents(days: Day[]): Array<Incident & { monitor_name: string }
   return listIncidentsSince(new Date(days[0].start).toISOString());
 }
 
-function incidentDays(): string {
-  const days = lastDays(INCIDENT_DAYS, SERVER_TIME_ZONE);
+function incidentDays(timeZone: string): string {
+  const days = lastDays(INCIDENT_DAYS, timeZone);
   const byDay = days.map((): Array<Incident & { monitor_name: string }> => []);
   for (const item of recentIncidents(days)) {
     byDay[dayIndex(days, Date.parse(item.started_at))]?.push(item);
@@ -240,7 +228,7 @@ function incidentDays(): string {
         <span class="incident-day-count">${count}${icon("chevron")}</span>
       </summary>
       <div class="incident-day-body">
-        ${items.length ? items.map(incidentItem).join("") : `<p class="incident-empty">No incidents reported.</p>`}
+        ${items.length ? items.map((item) => incidentItem(item, timeZone)).join("") : `<p class="incident-empty">No incidents reported.</p>`}
       </div>
     </details>`;
   });
@@ -251,15 +239,15 @@ function incidentDays(): string {
   </section>`;
 }
 
-function incidentItem(item: Incident & { monitor_name: string }): string {
+function incidentItem(item: Incident & { monitor_name: string }, timeZone: string): string {
   const open = !item.ended_at;
   return `<article class="incident ${open ? "open" : ""}">
     <div class="incident-head">
       <h3>${escapeHtml(item.title)}</h3>
       <span class="status-text ${open ? "down" : "up"}">${open ? "Ongoing" : "Resolved"}</span>
     </div>
-    <p class="incident-meta">${escapeHtml(item.monitor_name)} · ${escapeHtml(formatTime(item.started_at))}${
-      open ? "" : ` · Resolved ${escapeHtml(formatTime(item.ended_at))}`
+    <p class="incident-meta">${escapeHtml(item.monitor_name)} · ${escapeHtml(formatTime(item.started_at, timeZone))}${
+      open ? "" : ` · Resolved ${escapeHtml(formatTime(item.ended_at, timeZone))}`
     }</p>
     ${item.body ? `<p class="incident-body">${escapeHtml(item.body)}</p>` : ""}
   </article>`;
@@ -290,9 +278,9 @@ export function loginPage(error?: string): string {
   return layout({ title: "Admin", body, mood: "up", logoUrl: logoUrl() });
 }
 
-export function adminPage(opts: { toast?: string; editId?: number; editIncidentId?: number }): string {
+export function adminPage(opts: { toast?: string; editId?: number; editIncidentId?: number; timeZone: string }): string {
   const monitors = listMonitors();
-  const incidents = recentIncidents(lastDays(INCIDENT_DAYS, SERVER_TIME_ZONE));
+  const incidents = recentIncidents(lastDays(INCIDENT_DAYS, opts.timeZone));
   const edit = opts.editId ? getMonitor(opts.editId) : undefined;
   const editIncident = opts.editIncidentId ? getIncident(opts.editIncidentId) : undefined;
   const brand = brandName();
@@ -392,7 +380,7 @@ export function adminPage(opts: { toast?: string; editId?: number; editIncidentI
         <div class="stack">
           ${
             incidents.length
-              ? incidents.map((item) => adminIncidentCard(item, opts.editIncidentId)).join("")
+              ? incidents.map((item) => adminIncidentCard(item, opts.timeZone, opts.editIncidentId)).join("")
               : `<div class="empty service"><h2>No incidents yet</h2><p>Reported incidents will show up here.</p></div>`
           }
         </div>
@@ -507,13 +495,13 @@ function incidentForm(monitors: Monitor[], edit?: Incident): string {
   </form>`;
 }
 
-function adminIncidentCard(item: Incident & { monitor_name: string }, editIncidentId?: number): string {
+function adminIncidentCard(item: Incident & { monitor_name: string }, timeZone: string, editIncidentId?: number): string {
   const open = !item.ended_at;
   return `<article class="service">
     <div class="service-top">
       <div>
         <h3>${escapeHtml(item.title)}</h3>
-        <div class="meta"><span>${escapeHtml(item.monitor_name)}</span><span>${escapeHtml(formatTime(item.started_at))}</span></div>
+        <div class="meta"><span>${escapeHtml(item.monitor_name)}</span><span>${escapeHtml(formatTime(item.started_at, timeZone))}</span></div>
         ${item.body ? `<p class="incident-body">${escapeHtml(item.body)}</p>` : ""}
       </div>
       <span class="state ${open ? "down" : "up"}">${open ? "Ongoing" : "Resolved"}</span>

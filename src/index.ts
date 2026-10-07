@@ -27,6 +27,7 @@ import {
   parseMonitorType,
   parseTcpTarget,
 } from "./targets.js";
+import { visitorTimeZone } from "./time.js";
 
 adminPassword();
 seedExampleMonitor();
@@ -90,7 +91,7 @@ app.get("/events", (req, res) => {
 });
 
 app.get("/", (req, res) => {
-  res.type("html").send(statusPage({ isAdmin: isAuthed(req) }));
+  res.type("html").send(statusPage({ isAdmin: isAuthed(req), timeZone: visitorTimeZone(req) }));
 });
 
 app.get("/login", (req, res) => {
@@ -128,7 +129,7 @@ app.get("/admin", requireAuth, (req, res) => {
   const edit = Number(req.query.edit || 0) || undefined;
   const editIncident = Number(req.query.editIncident || 0) || undefined;
   const toast = toastFrom(req.query.toast);
-  res.type("html").send(adminPage({ editId: edit, editIncidentId: editIncident, toast }));
+  res.type("html").send(adminPage({ editId: edit, editIncidentId: editIncident, toast, timeZone: visitorTimeZone(req) }));
 });
 
 app.get("/admin/settings", requireAuth, (req, res) => {

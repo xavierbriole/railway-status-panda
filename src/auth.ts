@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import type { Request, Response, NextFunction } from "express";
+import { readCookie } from "./cookies.js";
 
 const COOKIE = "panda_session";
 const WINDOW_MS = 15 * 60 * 1000;
@@ -43,10 +44,8 @@ export function clearSession(res: Response): void {
 }
 
 export function isAuthed(req: Request): boolean {
-  const raw = req.headers.cookie || "";
-  const match = raw.split(";").map((part) => part.trim()).find((part) => part.startsWith(`${COOKIE}=`));
-  if (!match) return false;
-  const value = match.slice(COOKIE.length + 1);
+  const value = readCookie(req, COOKIE);
+  if (!value) return false;
   try {
     return crypto.timingSafeEqual(Buffer.from(value), Buffer.from(token()));
   } catch {
