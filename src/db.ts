@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import Database from "better-sqlite3";
 import { runMigrations } from "./migrations.js";
+import { DAY_MS, SLOT_MS } from "./time.js";
 
 export type MonitorType = "http" | "keyword" | "tcp" | "dns" | "ssl";
 
@@ -28,6 +29,12 @@ export type CheckRow = {
   checked_at: string;
 };
 
+export type UptimeSlot = {
+  start: number;
+  total: number;
+  ok: number;
+};
+
 export type IncidentSource = "auto" | "manual";
 
 export type Incident = {
@@ -40,7 +47,9 @@ export type Incident = {
   source: IncidentSource;
 };
 
-const MAX_CHECKS_PER_MONITOR = 2000;
+export const RECENT_CHECKS = 90;
+export const HISTORY_DAYS = 90;
+export const HISTORY_BARS = HISTORY_DAYS + 1;
 
 function resolveDataDir(): string {
   const preferred = process.env.DATA_DIR || "/data";
@@ -94,6 +103,15 @@ db.exec(`
     title TEXT NOT NULL,
     body TEXT NOT NULL DEFAULT '',
     source TEXT NOT NULL DEFAULT 'auto',
+    FOREIGN KEY (monitor_id) REFERENCES monitors(id) ON DELETE CASCADE
+  );
+
+  CREATE TABLE IF NOT EXISTS uptime_slots (
+    monitor_id INTEGER NOT NULL,
+    slot INTEGER NOT NULL,
+    total INTEGER NOT NULL DEFAULT 0,
+    ok INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (monitor_id, slot),
     FOREIGN KEY (monitor_id) REFERENCES monitors(id) ON DELETE CASCADE
   );
 
@@ -218,10 +236,21 @@ export function insertCheck(row: {
     .run(row.monitor_id, row.ok ? 1 : 0, row.status_code, row.latency_ms, row.error, checked_at);
 
   db.prepare(
+    `INSERT INTO uptime_slots (monitor_id, slot, total, ok) VALUES (?, ?, 1, ?)
+     ON CONFLICT(monitor_id, slot) DO UPDATE SET total = total + 1, ok = ok + excluded.ok`
+  ).run(row.monitor_id, Math.floor(Date.parse(checked_at) / SLOT_MS), row.ok ? 1 : 0);
+
+  // One spare day so every timezone, from UTC-12 to UTC+14, still has its full window.
+  db.prepare("DELETE FROM uptime_slots WHERE monitor_id = ? AND slot < ?").run(
+    row.monitor_id,
+    Math.floor((Date.now() - (HISTORY_BARS + 1) * DAY_MS) / SLOT_MS)
+  );
+
+  db.prepare(
     `DELETE FROM checks WHERE monitor_id = ? AND id NOT IN (
       SELECT id FROM checks WHERE monitor_id = ? ORDER BY id DESC LIMIT ?
     )`
-  ).run(row.monitor_id, row.monitor_id, MAX_CHECKS_PER_MONITOR);
+  ).run(row.monitor_id, row.monitor_id, RECENT_CHECKS);
 
   return {
     id: Number(info.lastInsertRowid),
@@ -257,14 +286,6 @@ export function consecutiveFailures(monitorId: number): number {
     n += 1;
   }
   return n;
-}
-
-export function uptimeRatio(monitorId: number): number | null {
-  const row = db
-    .prepare("SELECT COUNT(*) AS total, SUM(ok) AS ok FROM checks WHERE monitor_id = ?")
-    .get(monitorId) as { total: number; ok: number | null };
-  if (!row.total) return null;
-  return (row.ok ?? 0) / row.total;
 }
 
 export function openIncident(monitorId: number): Incident | undefined {
@@ -321,6 +342,12 @@ export function listIncidentsSince(sinceIso: string): Array<Incident & { monitor
        ORDER BY incidents.started_at DESC`
     )
     .all(sinceIso) as Array<Incident & { monitor_name: string }>;
+}
+
+export function uptimeSlots(monitorId: number, since: number): UptimeSlot[] {
+  return db
+    .prepare("SELECT slot * ? AS start, total, ok FROM uptime_slots WHERE monitor_id = ? AND slot >= ?")
+    .all(SLOT_MS, monitorId, Math.floor(since / SLOT_MS)) as UptimeSlot[];
 }
 
 export function lastCheckedAt(): string | null {

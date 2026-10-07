@@ -2,22 +2,25 @@ import {
   getIncident,
   getMonitor,
   getSetting,
+  HISTORY_BARS,
+  HISTORY_DAYS,
   lastCheckedAt,
   latestCheck,
   listIncidentsSince,
   listMonitors,
   recentChecks,
-  uptimeRatio,
+  RECENT_CHECKS,
+  uptimeSlots,
   type Incident,
   type Monitor,
   type MonitorType,
 } from "./db.js";
 import { MONITOR_TYPES, SSL_WARN_DAYS, targetLabel, typeLabel } from "./targets.js";
-import { escapeHtml, formatTime, icon, layout, pct, themeToggle, ticks, wordmark } from "./ui.js";
+import { dayIndex, formatDay, lastDays, SERVER_TIME_ZONE, type Day } from "./time.js";
+import { dayTicks, escapeHtml, formatTime, icon, layout, pct, themeToggle, ticks, wordmark, type DayTick } from "./ui.js";
 
 export type Overall = "calm" | "watch" | "down";
 
-const TICK_COUNT = 90;
 const INCIDENT_DAYS = 30;
 
 export function overallStatus(): Overall {
@@ -81,7 +84,7 @@ export function statusPage(opts: { isAdmin?: boolean } = {}): string {
         </div>
       </section>
 
-      ${monitors.length ? monitorList(monitors) : emptyPublic()}
+      ${monitors.length ? monitorList(monitors, lastDays(HISTORY_BARS, SERVER_TIME_ZONE)) : emptyPublic()}
       ${incidentDays()}
 
       <footer class="footer">
@@ -162,15 +165,15 @@ function emptyPublic(): string {
   </section>`;
 }
 
-function monitorList(monitors: Monitor[]): string {
+function monitorList(monitors: Monitor[], days: Day[]): string {
   const rows = monitors
     .map((monitor) => {
       const last = latestCheck(monitor.id);
       const ok = last ? Boolean(last.ok) : null;
       const state = ok == null ? "watch" : ok ? "up" : "down";
       const label = ok == null ? "Checking" : ok ? "Operational" : "Down";
-      const history = padTicks(recentChecks(monitor.id, TICK_COUNT).map((c) => Boolean(c.ok)));
-      const up = pct(uptimeRatio(monitor.id));
+      const history = dailyHistory(monitor.id, days);
+      const up = pct(uptimeRatio(history));
       const upLabel = up === "new" ? "No data yet" : `${up} uptime`;
       return `<article class="monitor">
         <div class="monitor-head">
@@ -181,13 +184,13 @@ function monitorList(monitors: Monitor[]): string {
           <span class="status-text ${state}">${label}</span>
         </div>
         <div class="monitor-bars">
-          ${ticks(history)}
+          ${dayTicks(history)}
           <span class="uptime-pct">${escapeHtml(upLabel)}</span>
         </div>
         <div class="range-labels">
-          <span>90 checks ago</span>
-          <span>60</span>
-          <span>30</span>
+          <span>${HISTORY_DAYS} days ago</span>
+          <span>${Math.round((HISTORY_DAYS * 2) / 3)}</span>
+          <span>${Math.round(HISTORY_DAYS / 3)}</span>
           <span>Today</span>
         </div>
       </article>`;
@@ -196,39 +199,55 @@ function monitorList(monitors: Monitor[]): string {
   return `<section class="services" id="services">${rows}</section>`;
 }
 
+function dailyHistory(monitorId: number, days: Day[]): DayTick[] {
+  const history = days.map((day) => ({ key: day.key, total: 0, ok: 0 }));
+  for (const slot of uptimeSlots(monitorId, days[0].start)) {
+    const day = history[dayIndex(days, slot.start)];
+    if (!day) continue;
+    day.total += slot.total;
+    day.ok += slot.ok;
+  }
+  return history;
+}
+
+function uptimeRatio(history: DayTick[]): number | null {
+  const total = history.reduce((sum, day) => sum + day.total, 0);
+  const ok = history.reduce((sum, day) => sum + day.ok, 0);
+  return total ? ok / total : null;
+}
+
+function recentIncidents(days: Day[]): Array<Incident & { monitor_name: string }> {
+  return listIncidentsSince(new Date(days[0].start).toISOString());
+}
+
 function incidentDays(): string {
-  const today = startOfDay(new Date());
-  const byDay = new Map<string, Array<Incident & { monitor_name: string }>>();
-  for (const item of listIncidentsSince(incidentWindowStart().toISOString())) {
-    const key = dayKey(new Date(item.started_at));
-    byDay.set(key, [...(byDay.get(key) ?? []), item]);
+  const days = lastDays(INCIDENT_DAYS, SERVER_TIME_ZONE);
+  const byDay = days.map((): Array<Incident & { monitor_name: string }> => []);
+  for (const item of recentIncidents(days)) {
+    byDay[dayIndex(days, Date.parse(item.started_at))]?.push(item);
   }
 
-  const todayKey = dayKey(today);
-  const days = Array.from({ length: INCIDENT_DAYS }, (_, i) => {
-    const date = new Date(today);
-    date.setDate(date.getDate() - i);
-    const key = dayKey(date);
-    const items = byDay.get(key) ?? [];
+  const todayKey = days[days.length - 1].key;
+  const sections = days.map(({ key }, i) => {
+    const items = byDay[i];
     const hasOpen = items.some((item) => !item.ended_at);
-    const label = date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
     const count = items.length
       ? `<span class="status-text ${hasOpen ? "down" : "up"}">${items.length} ${items.length === 1 ? "incident" : "incidents"}</span>`
       : `<span class="incident-day-none">No incidents</span>`;
     return `<details class="incident-day" data-day="${key}" ${key === todayKey ? "open" : ""}>
       <summary>
-        <span class="incident-day-label">${key === todayKey ? "Today" : escapeHtml(label)}</span>
+        <span class="incident-day-label">${key === todayKey ? "Today" : escapeHtml(formatDay(key))}</span>
         <span class="incident-day-count">${count}${icon("chevron")}</span>
       </summary>
       <div class="incident-day-body">
         ${items.length ? items.map(incidentItem).join("") : `<p class="incident-empty">No incidents reported.</p>`}
       </div>
     </details>`;
-  }).join("");
+  });
 
   return `<section class="incidents" id="incidents">
     <h2>Previous incidents</h2>
-    ${days}
+    ${sections.reverse().join("")}
   </section>`;
 }
 
@@ -244,25 +263,6 @@ function incidentItem(item: Incident & { monitor_name: string }): string {
     }</p>
     ${item.body ? `<p class="incident-body">${escapeHtml(item.body)}</p>` : ""}
   </article>`;
-}
-
-function incidentWindowStart(): Date {
-  const since = startOfDay(new Date());
-  since.setDate(since.getDate() - (INCIDENT_DAYS - 1));
-  return since;
-}
-
-function startOfDay(date: Date): Date {
-  const copy = new Date(date);
-  copy.setHours(0, 0, 0, 0);
-  return copy;
-}
-
-function dayKey(date: Date): string {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
 }
 
 export function loginPage(error?: string): string {
@@ -292,7 +292,7 @@ export function loginPage(error?: string): string {
 
 export function adminPage(opts: { toast?: string; editId?: number; editIncidentId?: number }): string {
   const monitors = listMonitors();
-  const incidents = listIncidentsSince(incidentWindowStart().toISOString());
+  const incidents = recentIncidents(lastDays(INCIDENT_DAYS, SERVER_TIME_ZONE));
   const edit = opts.editId ? getMonitor(opts.editId) : undefined;
   const editIncident = opts.editIncidentId ? getIncident(opts.editIncidentId) : undefined;
   const brand = brandName();
@@ -451,7 +451,7 @@ function adminCard(monitor: Monitor, editId?: number): string {
   const ok = last ? Boolean(last.ok) : null;
   const state = ok == null ? "watch" : ok ? "up" : "down";
   const label = ok == null ? "Checking" : ok ? "Up" : "Down";
-  const history = padTicks(recentChecks(monitor.id, TICK_COUNT).map((c) => Boolean(c.ok)));
+  const history = padTicks(recentChecks(monitor.id, RECENT_CHECKS).map((c) => Boolean(c.ok)));
   return `<article class="service">
     <div class="service-top">
       <div>
@@ -600,6 +600,6 @@ function intervalOptions(selected: number): string {
 }
 
 function padTicks(values: boolean[]): Array<boolean | null> {
-  const missing = Math.max(0, TICK_COUNT - values.length);
+  const missing = Math.max(0, RECENT_CHECKS - values.length);
   return [...Array(missing).fill(null), ...values];
 }

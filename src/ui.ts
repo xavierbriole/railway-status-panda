@@ -1,3 +1,5 @@
+import { formatDay } from "./time.js";
+
 export function escapeHtml(value: string): string {
   return value
     .replaceAll("&", "&amp;")
@@ -53,6 +55,20 @@ export function ticks(values: Array<boolean | null>): string {
       const cls = value == null ? "unknown" : value ? "up" : "down";
       const label = value == null ? "No data" : value ? "Up" : "Down";
       return `<i class="tick ${cls}" title="${label}"></i>`;
+    })
+    .join("");
+  return `<div class="ticks">${cells}</div>`;
+}
+
+export type DayTick = { key: string; total: number; ok: number };
+
+export function dayTicks(days: DayTick[]): string {
+  const cells = days
+    .map(({ key, total, ok }) => {
+      const cls = !total ? "unknown" : ok === total ? "up" : ok === 0 ? "down" : "watch";
+      const day = formatDay(key);
+      const label = total ? `${day} · ${pct(ok / total)} uptime` : `${day} · No data`;
+      return `<i class="tick ${cls}" title="${escapeHtml(label)}"></i>`;
     })
     .join("");
   return `<div class="ticks">${cells}</div>`;
@@ -418,6 +434,7 @@ html[data-theme="dark"] .theme-toggle .icon-sun { display: block; }
 }
 .tick.up { background: var(--green); }
 .tick.down { background: var(--red); }
+.tick.watch { background: var(--yellow); }
 .tick.unknown { background: var(--line); }
 .tick:hover { filter: brightness(.92); }
 html[data-theme="dark"] .tick:hover { filter: brightness(1.15); }
